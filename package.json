@@ -1,0 +1,52 @@
+{
+  "name": "tabby-speech-to-text",
+  "version": "0.1.0",
+  "description": "Speech-to-text plugin for Tabby terminal",
+  "keywords": [
+    "tabby-plugin"
+  ],
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "scripts": {
+    "build": "webpack --progress --color",
+    "watch": "webpack --progress --color --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@angular/animations": "^12.0.0",
+    "@angular/common": "^12.0.0",
+    "@angular/compiler": "^12.0.0",
+    "@angular/core": "^12.0.0",
+    "@angular/forms": "^12.0.0",
+    "@angular/platform-browser": "^12.0.0",
+    "@angular/platform-browser-dynamic": "^12.0.0",
+    "@ng-bootstrap/ng-bootstrap": "^10.0.0",
+    "@types/dom-speech-recognition": "^0.0.1",
+    "rxjs": "^7.1.0",
+    "tabby-core": "^1.0.156",
+    "tabby-settings": "^1.0.156",
+    "tabby-terminal": "^1.0.156",
+    "ts-loader": "^9.2.3",
+    "typescript": "^4.3.5",
+    "webpack": "^5.38.1",
+    "webpack-cli": "^4.7.2"
+  },
+  "peerDependencies": {
+    "@angular/animations": "^12.0.0",
+    "@angular/common": "^12.0.0",
+    "@angular/compiler": "^12.0.0",
+    "@angular/core": "^12.0.0",
+    "@angular/forms": "^12.0.0",
+    "@angular/platform-browser": "^12.0.0",
+    "@angular/platform-browser-dynamic": "^12.0.0",
+    "rxjs": "^7.1.0",
+    "tabby-core": "*",
+    "tabby-settings": "*",
+    "tabby-terminal": "*"
+  }
+}
