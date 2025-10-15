@@ -114,13 +114,12 @@ export class TerminalIntegrationService {
 
     private submitCommand(): void {
         const terminal = this.getActiveTerminal()
-        if (!terminal || !terminal.frontend) {
+        if (!terminal) {
             return
         }
 
         // Send Enter to execute the command
-        terminal.frontend.write('\n')
-        terminal.frontend.input('\n')
+        terminal.sendInput('\n')
 
         // Clear our transcript buffer
         this.currentTranscript = ''

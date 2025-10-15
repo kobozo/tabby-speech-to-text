@@ -11,10 +11,12 @@ export interface SpeechToTextConfig {
 @Injectable()
 export class SpeechConfigProvider extends ConfigProvider {
     defaults = {
+        hotkeys: {
+            'speech-to-text-toggle': ['Ctrl-Shift-S'],
+        },
         speechToText: {
             enabled: true,
             language: 'en-US',
-            hotkey: 'Ctrl+Shift+S',
             showIndicator: true,
         },
     }

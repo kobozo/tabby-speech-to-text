@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core'
 import { CommonModule } from '@angular/common'
-import { HotkeyProvider, ConfigProvider, BootstrapData, BOOTSTRAP_DATA } from 'tabby-core'
+import { HotkeyProvider, ConfigProvider, HotkeysService } from 'tabby-core'
 
 import { SpeechRecognitionService } from './services/speech-recognition.service'
 import { TerminalIntegrationService } from './services/terminal-integration.service'
@@ -39,11 +39,13 @@ import { SpeechIndicatorComponent } from './components/speech-indicator.componen
 export default class SpeechToTextModule {
     constructor(
         private terminalIntegration: TerminalIntegrationService,
-        private bootstrapData: BootstrapData,
+        private hotkeys: HotkeysService,
     ) {
         // Register hotkey handler
-        this.bootstrapData.registerHotkeyHandler('speech-to-text-toggle', () => {
-            this.terminalIntegration.toggleListening()
+        this.hotkeys.hotkey$.subscribe(hotkey => {
+            if (hotkey === 'speech-to-text-toggle') {
+                this.terminalIntegration.toggleListening()
+            }
         })
     }
 }
