@@ -17,18 +17,16 @@ export class TerminalIntegrationService {
     }
 
     private setupSpeechHandlers(): void {
-        // Handle transcript updates
+        // Handle transcript updates (Whisper only provides final results)
         this.speechService.onTranscript.subscribe(result => {
-            if (result.isFinal) {
-                // Append final transcript
-                this.currentTranscript += result.transcript
-                this.interimTranscript = ''
-                this.updateTerminalInput()
-            } else {
-                // Update interim transcript for real-time feedback
-                this.interimTranscript = result.transcript
-                this.updateTerminalInput()
-            }
+            // Set the transcript
+            this.currentTranscript = result.transcript
+            this.updateTerminalInput()
+
+            // Auto-submit after transcription completes
+            setTimeout(() => {
+                this.submitCommand()
+            }, 100)
         })
 
         // Handle recording start

@@ -4,8 +4,8 @@ import { ConfigProvider } from 'tabby-core'
 export interface SpeechToTextConfig {
     enabled: boolean
     language: string
-    hotkey: string
     showIndicator: boolean
+    openaiApiKey: string
 }
 
 @Injectable()
@@ -16,8 +16,9 @@ export class SpeechConfigProvider extends ConfigProvider {
         },
         speechToText: {
             enabled: true,
-            language: 'en-US',
+            language: 'en',
             showIndicator: true,
+            openaiApiKey: '',
         },
     }
 
