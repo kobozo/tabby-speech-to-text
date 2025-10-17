@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core'
 import { BaseTerminalTabComponent } from 'tabby-terminal'
 import { AppService } from 'tabby-core'
-import { WebSpeechService } from './web-speech.service'
+import { SpeechRecognitionService } from './speech-recognition.service'
 import { BehaviorSubject } from 'rxjs'
 
 @Injectable({ providedIn: 'root' })
@@ -13,7 +13,7 @@ export class TerminalIntegrationService {
 
     constructor(
         private app: AppService,
-        private speechService: WebSpeechService,
+        private speechService: SpeechRecognitionService,
     ) {
         this.setupSpeechHandlers()
     }

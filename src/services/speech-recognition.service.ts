@@ -126,7 +126,7 @@ export class SpeechRecognitionService {
     }
 
     private async transcribeAudio(audioBlob: Blob): Promise<void> {
-        const apiKey = this.config.store.speechToText?.openaiApiKey
+        const apiKey = this.config.store?.speechToText?.openaiApiKey
 
         if (!apiKey) {
             this.onError.next('OpenAI API key not configured. Please set it in Settings.')
@@ -138,7 +138,7 @@ export class SpeechRecognitionService {
             const formData = new FormData()
             formData.append('file', audioBlob, 'audio.webm')
             formData.append('model', 'whisper-1')
-            formData.append('language', this.config.store.speechToText?.language || 'en')
+            formData.append('language', this.config.store?.speechToText?.language || 'en')
 
             const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                 method: 'POST',

@@ -5,7 +5,6 @@ import { HotkeyProvider, ConfigProvider, HotkeysService, ToolbarButtonProvider }
 import { SettingsTabProvider } from 'tabby-settings'
 
 import { SpeechRecognitionService } from './services/speech-recognition.service'
-import { WebSpeechService } from './services/web-speech.service'
 import { TerminalIntegrationService } from './services/terminal-integration.service'
 import { SpeechHotkeyProvider } from './providers/speech-hotkey.provider'
 import { SpeechConfigProvider } from './providers/config.provider'
@@ -22,7 +21,6 @@ import { SpeechToTextSettingsTabComponent } from './components/settings-tab.comp
     providers: [
         // Services
         SpeechRecognitionService,
-        WebSpeechService,
         TerminalIntegrationService,
 
         // Providers
