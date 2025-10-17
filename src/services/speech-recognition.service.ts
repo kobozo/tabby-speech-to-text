@@ -158,9 +158,16 @@ export class SpeechRecognitionService {
     private startSilenceDetection(): void {
         const SILENCE_THRESHOLD = 0.01  // Volume threshold for silence
         const SILENCE_DURATION = 1500   // 1.5 seconds of silence triggers transcription
+        const MIN_CHUNKS = 2  // Minimum 2 seconds of audio before processing
+
+        console.log('[SpeechRecognition] Starting silence detection...')
+        let logCounter = 0
 
         this.silenceDetectionInterval = setInterval(() => {
-            if (!this.analyser) return
+            if (!this.analyser) {
+                console.log('[SpeechRecognition] No analyser available')
+                return
+            }
 
             const bufferLength = this.analyser.frequencyBinCount
             const dataArray = new Uint8Array(bufferLength)
@@ -174,29 +181,45 @@ export class SpeechRecognitionService {
             }
             const rms = Math.sqrt(sum / bufferLength)
 
+            // Log every 10 cycles (1 second) for debugging
+            logCounter++
+            if (logCounter % 10 === 0) {
+                console.log(`[SpeechRecognition] RMS: ${rms.toFixed(4)}, Chunks: ${this.audioChunks.length}, Processing: ${this.isProcessingChunk}`)
+            }
+
             // Check if there's sound
             if (rms > SILENCE_THRESHOLD) {
                 this.lastSoundTime = Date.now()
             } else {
-                // Check if silence duration exceeded
+                // Check if silence duration exceeded AND we have enough audio (minimum 2 seconds)
                 const silenceDuration = Date.now() - this.lastSoundTime
-                if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length > 0 && !this.isProcessingChunk) {
-                    console.log('[SpeechRecognition] Silence detected, processing chunk...')
+                if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length >= MIN_CHUNKS && !this.isProcessingChunk) {
+                    console.log('[SpeechRecognition] Silence detected! Processing chunk...')
+                    console.log(`[SpeechRecognition] Silence duration: ${silenceDuration}ms, Audio chunks: ${this.audioChunks.length}`)
                     this.processCurrentChunk()
+                } else if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length < MIN_CHUNKS) {
+                    console.log(`[SpeechRecognition] Silence detected but not enough audio yet (${this.audioChunks.length}/${MIN_CHUNKS} chunks)`)
                 }
             }
         }, 100)  // Check every 100ms
     }
 
     private async processCurrentChunk(): Promise<void> {
-        if (this.audioChunks.length === 0 || this.isProcessingChunk) return
+        if (this.audioChunks.length === 0 || this.isProcessingChunk) {
+            console.log(`[SpeechRecognition] Skipping chunk processing - chunks: ${this.audioChunks.length}, processing: ${this.isProcessingChunk}`)
+            return
+        }
 
+        console.log(`[SpeechRecognition] Starting chunk processing with ${this.audioChunks.length} chunks`)
         this.isProcessingChunk = true
         const chunksToProcess = [...this.audioChunks]
         this.audioChunks = []  // Clear for next chunk
 
         const audioBlob = new Blob(chunksToProcess, { type: 'audio/webm' })
+        console.log(`[SpeechRecognition] Created audio blob of size: ${audioBlob.size} bytes`)
+
         await this.transcribeAudio(audioBlob, false)
+        console.log('[SpeechRecognition] Chunk processing completed')
         this.isProcessingChunk = false
     }
 
