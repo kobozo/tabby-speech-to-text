@@ -48,6 +48,16 @@ export class TerminalIntegrationService {
 
     private getActiveTerminal(): any | null {
         const activeTab = this.app.activeTab
+
+        // Debug logging
+        console.log('Active tab:', activeTab)
+        console.log('Has frontend?', activeTab && 'frontend' in activeTab)
+        console.log('Has sendInput?', activeTab && 'sendInput' in activeTab)
+        if (activeTab) {
+            console.log('Active tab keys:', Object.keys(activeTab))
+            console.log('Active tab constructor:', activeTab.constructor?.name)
+        }
+
         // Check if it's a terminal tab by looking for terminal-specific properties
         if (activeTab && 'frontend' in activeTab && 'sendInput' in activeTab) {
             return activeTab
