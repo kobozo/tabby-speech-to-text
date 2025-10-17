@@ -173,10 +173,12 @@ export class SpeechRecognitionService {
     }
 
     private startSilenceDetection(): void {
-        const SILENCE_THRESHOLD = 0.01  // Volume threshold for silence
+        const SILENCE_THRESHOLD = 0.02  // Volume threshold for silence (increased from 0.01)
+        const SPEECH_THRESHOLD = 0.05   // Minimum volume to consider as actual speech
         const SILENCE_DURATION = 1500   // 1.5 seconds of silence triggers transcription
         const MIN_RECORDING_DURATION = 1000  // Minimum 1 second of audio before processing
         let recordingStartTime = Date.now()
+        let hasActualSpeech = false  // Track if we detected real speech (not just noise)
 
         console.log('[SpeechRecognition] Starting silence detection...')
         let logCounter = 0
@@ -202,19 +204,24 @@ export class SpeechRecognitionService {
             logCounter++
             if (logCounter % 10 === 0) {
                 const recordingDuration = Date.now() - recordingStartTime
-                console.log(`[SpeechRecognition] RMS: ${rms.toFixed(4)}, Recording: ${recordingDuration}ms, Processing: ${this.isProcessingChunk}`)
+                console.log(`[SpeechRecognition] RMS: ${rms.toFixed(4)}, Recording: ${recordingDuration}ms, Has speech: ${hasActualSpeech}`)
             }
 
-            // Check if there's sound
-            if (rms > SILENCE_THRESHOLD) {
+            // Check if there's actual speech (not just background noise)
+            if (rms > SPEECH_THRESHOLD) {
+                hasActualSpeech = true
+                this.lastSoundTime = Date.now()
+            } else if (rms > SILENCE_THRESHOLD) {
+                // Still some sound, but not strong enough to be considered speech
                 this.lastSoundTime = Date.now()
             } else {
-                // Check if silence duration exceeded AND we have enough audio duration
+                // Check if silence duration exceeded AND we have enough audio duration AND we detected actual speech
                 const silenceDuration = Date.now() - this.lastSoundTime
                 const recordingDuration = Date.now() - recordingStartTime
 
                 if (silenceDuration >= SILENCE_DURATION &&
                     recordingDuration >= MIN_RECORDING_DURATION &&
+                    hasActualSpeech &&
                     !this.isProcessingChunk &&
                     this.isRecordingChunk &&
                     this.mediaRecorder.state === 'recording') {
@@ -228,8 +235,9 @@ export class SpeechRecognitionService {
                     // Stop the recorder - this will trigger ondataavailable with a complete WebM file
                     this.mediaRecorder.stop()
 
-                    // Reset timer for next chunk
+                    // Reset timer and speech detection for next chunk
                     recordingStartTime = Date.now()
+                    hasActualSpeech = false
                 }
             }
         }, 100)  // Check every 100ms
@@ -250,6 +258,8 @@ export class SpeechRecognitionService {
             formData.append('file', audioBlob, 'audio.webm')
             formData.append('model', 'whisper-1')
             formData.append('language', this.config.store?.speechToText?.language || 'en')
+            // Add prompt to reduce hallucinations - tells Whisper to only transcribe actual speech
+            formData.append('prompt', 'Transcribe only the speech that is actually spoken. If there is no speech or only silence, return an empty result.')
 
             const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                 method: 'POST',
