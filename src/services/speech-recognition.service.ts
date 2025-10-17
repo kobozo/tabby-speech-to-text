@@ -10,8 +10,6 @@ export interface TranscriptResult {
 @Injectable({ providedIn: 'root' })
 export class SpeechRecognitionService {
     private mediaRecorder: MediaRecorder | null = null
-    private audioChunks: Blob[] = []
-    private allChunks: Blob[] = []  // Keep all chunks for full transcription
     private isActive = false
     private isAvailable = false
     private stream: MediaStream | null = null
@@ -20,6 +18,7 @@ export class SpeechRecognitionService {
     private silenceDetectionInterval: any = null
     private lastSoundTime = 0
     private isProcessingChunk = false
+    private isRecordingChunk = false
 
     public onTranscript = new Subject<TranscriptResult>()
     public onStart = new Subject<void>()
@@ -78,52 +77,58 @@ export class SpeechRecognitionService {
             this.analyser.fftSize = 2048
             source.connect(this.analyser)
 
-            // Create MediaRecorder with timeslice for chunked recording
+            // Create MediaRecorder (no timeslice - we'll stop/restart for chunks)
             this.mediaRecorder = new MediaRecorder(this.stream, {
                 mimeType: 'audio/webm',
             })
 
-            this.audioChunks = []
-            this.allChunks = []
             this.lastSoundTime = Date.now()
 
-            this.mediaRecorder.ondataavailable = (event) => {
+            this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0) {
-                    this.audioChunks.push(event.data)
-                    this.allChunks.push(event.data)
+                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes`)
+                    // This blob is a complete WebM file
+                    await this.transcribeAudio(event.data, false)
+
+                    // After transcription, restart recording if still active
+                    if (this.isActive && this.mediaRecorder && this.mediaRecorder.state === 'inactive') {
+                        console.log('[SpeechRecognition] Restarting recording for next chunk...')
+                        this.mediaRecorder.start()
+                        this.isRecordingChunk = true
+                        this.isProcessingChunk = false
+                    }
                 }
             }
 
             this.mediaRecorder.onstop = async () => {
-                // Stop silence detection
-                if (this.silenceDetectionInterval) {
-                    clearInterval(this.silenceDetectionInterval)
-                    this.silenceDetectionInterval = null
-                }
+                console.log('[SpeechRecognition] MediaRecorder stopped (final)')
 
-                // Process any remaining audio
-                if (this.audioChunks.length > 0 && !this.isProcessingChunk) {
-                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' })
-                    await this.transcribeAudio(audioBlob, true)
-                }
+                // This is the final stop, not a chunk stop
+                if (!this.isActive) {
+                    // Stop silence detection
+                    if (this.silenceDetectionInterval) {
+                        clearInterval(this.silenceDetectionInterval)
+                        this.silenceDetectionInterval = null
+                    }
 
-                // Clean up
-                if (this.audioContext) {
-                    this.audioContext.close()
-                    this.audioContext = null
-                }
-                if (this.stream) {
-                    this.stream.getTracks().forEach(track => track.stop())
-                    this.stream = null
-                }
+                    // Clean up
+                    if (this.audioContext) {
+                        this.audioContext.close()
+                        this.audioContext = null
+                    }
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop())
+                        this.stream = null
+                    }
 
-                this.isActive = false
-                this.onStop.next()
+                    this.onStop.next()
+                }
             }
 
-            // Start recording with 1-second time slices
-            this.mediaRecorder.start(1000)
+            // Start recording (no timeslice parameter)
+            this.mediaRecorder.start()
             this.isActive = true
+            this.isRecordingChunk = true
             this.onStart.next()
 
             // Start silence detection
@@ -141,6 +146,8 @@ export class SpeechRecognitionService {
         }
 
         try {
+            // Mark as inactive BEFORE stopping so onstop knows this is final
+            this.isActive = false
             this.mediaRecorder.stop()
         } catch (error) {
             console.error('Failed to stop speech recognition:', error)
@@ -158,14 +165,14 @@ export class SpeechRecognitionService {
     private startSilenceDetection(): void {
         const SILENCE_THRESHOLD = 0.01  // Volume threshold for silence
         const SILENCE_DURATION = 1500   // 1.5 seconds of silence triggers transcription
-        const MIN_CHUNKS = 2  // Minimum 2 seconds of audio before processing
+        const MIN_RECORDING_DURATION = 1000  // Minimum 1 second of audio before processing
+        let recordingStartTime = Date.now()
 
         console.log('[SpeechRecognition] Starting silence detection...')
         let logCounter = 0
 
         this.silenceDetectionInterval = setInterval(() => {
-            if (!this.analyser) {
-                console.log('[SpeechRecognition] No analyser available')
+            if (!this.analyser || !this.mediaRecorder) {
                 return
             }
 
@@ -184,44 +191,40 @@ export class SpeechRecognitionService {
             // Log every 10 cycles (1 second) for debugging
             logCounter++
             if (logCounter % 10 === 0) {
-                console.log(`[SpeechRecognition] RMS: ${rms.toFixed(4)}, Chunks: ${this.audioChunks.length}, Processing: ${this.isProcessingChunk}`)
+                const recordingDuration = Date.now() - recordingStartTime
+                console.log(`[SpeechRecognition] RMS: ${rms.toFixed(4)}, Recording: ${recordingDuration}ms, Processing: ${this.isProcessingChunk}`)
             }
 
             // Check if there's sound
             if (rms > SILENCE_THRESHOLD) {
                 this.lastSoundTime = Date.now()
             } else {
-                // Check if silence duration exceeded AND we have enough audio (minimum 2 seconds)
+                // Check if silence duration exceeded AND we have enough audio duration
                 const silenceDuration = Date.now() - this.lastSoundTime
-                if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length >= MIN_CHUNKS && !this.isProcessingChunk) {
-                    console.log('[SpeechRecognition] Silence detected! Processing chunk...')
-                    console.log(`[SpeechRecognition] Silence duration: ${silenceDuration}ms, Audio chunks: ${this.audioChunks.length}`)
-                    this.processCurrentChunk()
-                } else if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length < MIN_CHUNKS) {
-                    console.log(`[SpeechRecognition] Silence detected but not enough audio yet (${this.audioChunks.length}/${MIN_CHUNKS} chunks)`)
+                const recordingDuration = Date.now() - recordingStartTime
+
+                if (silenceDuration >= SILENCE_DURATION &&
+                    recordingDuration >= MIN_RECORDING_DURATION &&
+                    !this.isProcessingChunk &&
+                    this.isRecordingChunk &&
+                    this.mediaRecorder.state === 'recording') {
+
+                    console.log('[SpeechRecognition] Silence detected! Stopping recorder to process chunk...')
+                    console.log(`[SpeechRecognition] Silence: ${silenceDuration}ms, Recording duration: ${recordingDuration}ms`)
+
+                    this.isProcessingChunk = true
+                    this.isRecordingChunk = false
+
+                    // Stop the recorder - this will trigger ondataavailable with a complete WebM file
+                    this.mediaRecorder.stop()
+
+                    // Reset timer for next chunk
+                    recordingStartTime = Date.now()
                 }
             }
         }, 100)  // Check every 100ms
     }
 
-    private async processCurrentChunk(): Promise<void> {
-        if (this.audioChunks.length === 0 || this.isProcessingChunk) {
-            console.log(`[SpeechRecognition] Skipping chunk processing - chunks: ${this.audioChunks.length}, processing: ${this.isProcessingChunk}`)
-            return
-        }
-
-        console.log(`[SpeechRecognition] Starting chunk processing with ${this.audioChunks.length} chunks`)
-        this.isProcessingChunk = true
-        const chunksToProcess = [...this.audioChunks]
-        this.audioChunks = []  // Clear for next chunk
-
-        const audioBlob = new Blob(chunksToProcess, { type: 'audio/webm' })
-        console.log(`[SpeechRecognition] Created audio blob of size: ${audioBlob.size} bytes`)
-
-        await this.transcribeAudio(audioBlob, false)
-        console.log('[SpeechRecognition] Chunk processing completed')
-        this.isProcessingChunk = false
-    }
 
     private async transcribeAudio(audioBlob: Blob, isFinal: boolean = true): Promise<void> {
         const apiKey = this.config.store?.speechToText?.openaiApiKey
