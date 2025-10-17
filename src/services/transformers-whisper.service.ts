@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { pipeline } from '@xenova/transformers'
+import { pipeline, env } from '@xenova/transformers'
 import { Subject } from 'rxjs'
 import { ConfigService } from 'tabby-core'
 
@@ -23,7 +23,12 @@ export class TransformersWhisperService {
     public onModelProgress = new Subject<number>()
     public onError = new Subject<string>()
 
-    constructor(private config: ConfigService) {}
+    constructor(private config: ConfigService) {
+        // Configure Transformers.js to use web environment only (no Node.js binaries)
+        env.allowLocalModels = false
+        env.useBrowserCache = true
+        env.backends.onnx.wasm.proxy = false
+    }
 
     async ensureModelLoaded(): Promise<void> {
         if (this.isModelLoaded) return
