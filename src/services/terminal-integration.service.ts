@@ -28,9 +28,10 @@ export class TerminalIntegrationService {
                 this.typeIntoTerminal(result.transcript)
                 this.interimTranscript = ''
             } else {
-                // Interim result - just log it (could show visual feedback here)
+                // Interim result - type into terminal with space after
                 console.log('Interim transcript:', result.transcript)
                 this.interimTranscript = result.transcript
+                this.typeIntoTerminal(result.transcript + ' ')
             }
         })
 
