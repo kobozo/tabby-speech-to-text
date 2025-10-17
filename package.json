@@ -47,5 +47,8 @@
     "tabby-core": "*",
     "tabby-settings": "*",
     "tabby-terminal": "*"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2"
   }
 }

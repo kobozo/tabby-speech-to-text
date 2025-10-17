@@ -27,6 +27,10 @@ module.exports = {
           },
         },
       },
+      {
+        test: /\.node$/,
+        loader: 'node-loader',
+      },
     ],
   },
   externals: [
@@ -41,6 +45,8 @@ module.exports = {
     'node-pty',
     'child_process',
     'electron',
+    'onnxruntime-node',
+    'sharp',
     /^rxjs/,
     /^@angular/,
     /^@ng-bootstrap/,
