@@ -5,7 +5,7 @@ import { HotkeyProvider, ConfigProvider, HotkeysService, ToolbarButtonProvider }
 import { SettingsTabProvider } from 'tabby-settings'
 
 import { SpeechRecognitionService } from './services/speech-recognition.service'
-import { TransformersWhisperService } from './services/transformers-whisper.service'
+import { WebSpeechService } from './services/web-speech.service'
 import { TerminalIntegrationService } from './services/terminal-integration.service'
 import { SpeechHotkeyProvider } from './providers/speech-hotkey.provider'
 import { SpeechConfigProvider } from './providers/config.provider'
@@ -13,7 +13,6 @@ import { SpeechToTextSettingsTabProvider } from './providers/settings-tab.provid
 import { SpeechToTextToolbarButtonProvider } from './providers/toolbar-button.provider'
 import { SpeechIndicatorComponent } from './components/speech-indicator.component'
 import { SpeechToTextSettingsTabComponent } from './components/settings-tab.component'
-import { ModelLoadingComponent } from './components/model-loading.component'
 
 @NgModule({
     imports: [
@@ -23,7 +22,7 @@ import { ModelLoadingComponent } from './components/model-loading.component'
     providers: [
         // Services
         SpeechRecognitionService,
-        TransformersWhisperService,
+        WebSpeechService,
         TerminalIntegrationService,
 
         // Providers
@@ -51,12 +50,10 @@ import { ModelLoadingComponent } from './components/model-loading.component'
     declarations: [
         SpeechIndicatorComponent,
         SpeechToTextSettingsTabComponent,
-        ModelLoadingComponent,
     ],
     exports: [
         SpeechIndicatorComponent,
         SpeechToTextSettingsTabComponent,
-        ModelLoadingComponent,
     ],
 })
 export default class SpeechToTextModule {

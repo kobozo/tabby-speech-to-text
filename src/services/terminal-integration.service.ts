@@ -1,32 +1,36 @@
 import { Injectable } from '@angular/core'
 import { BaseTerminalTabComponent } from 'tabby-terminal'
 import { AppService } from 'tabby-core'
-import { TransformersWhisperService } from './transformers-whisper.service'
+import { WebSpeechService } from './web-speech.service'
 import { BehaviorSubject } from 'rxjs'
 
 @Injectable({ providedIn: 'root' })
 export class TerminalIntegrationService {
     private currentTranscript = ''
+    private interimTranscript = ''
     private isListening = false
     public isListening$ = new BehaviorSubject<boolean>(false)
 
     constructor(
         private app: AppService,
-        private speechService: TransformersWhisperService,
+        private speechService: WebSpeechService,
     ) {
         this.setupSpeechHandlers()
     }
 
     private setupSpeechHandlers(): void {
-        // Handle transcript updates
+        // Handle transcript updates (both interim and final)
         this.speechService.onTranscript.subscribe(result => {
             if (result.isFinal) {
-                // Only type into terminal when transcription is final
+                // Final result - type into terminal
+                console.log('Final transcript:', result.transcript)
                 this.currentTranscript = result.transcript
                 this.typeIntoTerminal(result.transcript)
+                this.interimTranscript = ''
             } else {
-                // For interim results, we could show a preview (future enhancement)
-                console.log('Interim:', result.transcript)
+                // Interim result - just log it (could show visual feedback here)
+                console.log('Interim transcript:', result.transcript)
+                this.interimTranscript = result.transcript
             }
         })
 
@@ -35,21 +39,25 @@ export class TerminalIntegrationService {
             this.isListening = true
             this.isListening$.next(true)
             this.currentTranscript = ''
-            console.log('Terminal integration: Recording started')
+            this.interimTranscript = ''
+            console.log('Terminal integration: Speech recognition started')
         })
 
         // Handle recording stop
         this.speechService.onStop.subscribe(() => {
             this.isListening = false
             this.isListening$.next(false)
-            console.log('Terminal integration: Recording stopped')
+            console.log('Terminal integration: Speech recognition stopped')
         })
 
         // Handle errors
         this.speechService.onError.subscribe(error => {
             console.error('Speech service error:', error)
-            this.isListening = false
-            this.isListening$.next(false)
+            // Don't stop listening on 'no-speech' errors
+            if (!error.includes('no-speech')) {
+                this.isListening = false
+                this.isListening$.next(false)
+            }
         })
     }
 

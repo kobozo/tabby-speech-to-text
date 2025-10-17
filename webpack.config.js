@@ -1,5 +1,4 @@
 const path = require('path')
-const webpack = require('webpack')
 
 module.exports = {
   target: 'node',
@@ -16,11 +15,6 @@ module.exports = {
   resolve: {
     modules: ['src/', 'node_modules', '../app/node_modules', '../node_modules'].map(x => path.join(__dirname, x)),
     extensions: ['.ts', '.js'],
-    alias: {
-      // Force Transformers.js to use web version, not node version
-      'onnxruntime-node': false,
-      'sharp': false,
-    },
   },
   module: {
     rules: [
@@ -32,10 +26,6 @@ module.exports = {
             configFile: path.resolve(__dirname, 'tsconfig.json'),
           },
         },
-      },
-      {
-        test: /\.node$/,
-        loader: 'node-loader',
       },
     ],
   },
@@ -51,8 +41,6 @@ module.exports = {
     'node-pty',
     'child_process',
     'electron',
-    'onnxruntime-node',
-    'sharp',
     /^rxjs/,
     /^@angular/,
     /^@ng-bootstrap/,
