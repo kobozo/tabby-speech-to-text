@@ -51,17 +51,28 @@ export class TerminalIntegrationService {
 
         // Debug logging
         console.log('Active tab:', activeTab)
-        console.log('Has frontend?', activeTab && 'frontend' in activeTab)
-        console.log('Has sendInput?', activeTab && 'sendInput' in activeTab)
-        if (activeTab) {
-            console.log('Active tab keys:', Object.keys(activeTab))
-            console.log('Active tab constructor:', activeTab.constructor?.name)
+        console.log('Active tab constructor:', activeTab?.constructor?.name)
+
+        if (!activeTab) {
+            return null
         }
 
-        // Check if it's a terminal tab by looking for terminal-specific properties
-        if (activeTab && 'frontend' in activeTab && 'sendInput' in activeTab) {
+        // Check if it's a split tab and get the focused tab from within it
+        if (activeTab.constructor?.name === 'SplitTabComponent') {
+            const focusedTab = (activeTab as any).getFocusedTab?.()
+            console.log('Focused tab from split:', focusedTab)
+            console.log('Focused tab constructor:', focusedTab?.constructor?.name)
+
+            if (focusedTab && 'frontend' in focusedTab && 'sendInput' in focusedTab) {
+                return focusedTab
+            }
+        }
+
+        // Check if it's a terminal tab directly
+        if ('frontend' in activeTab && 'sendInput' in activeTab) {
             return activeTab
         }
+
         return null
     }
 
