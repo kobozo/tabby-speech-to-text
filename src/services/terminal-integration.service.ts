@@ -46,9 +46,10 @@ export class TerminalIntegrationService {
         })
     }
 
-    private getActiveTerminal(): BaseTerminalTabComponent | null {
+    private getActiveTerminal(): any | null {
         const activeTab = this.app.activeTab
-        if (activeTab instanceof BaseTerminalTabComponent) {
+        // Check if it's a terminal tab by looking for terminal-specific properties
+        if (activeTab && 'frontend' in activeTab && 'sendInput' in activeTab) {
             return activeTab
         }
         return null
