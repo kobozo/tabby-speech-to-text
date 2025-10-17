@@ -19,14 +19,9 @@ export class TerminalIntegrationService {
     private setupSpeechHandlers(): void {
         // Handle transcript updates (Whisper only provides final results)
         this.speechService.onTranscript.subscribe(result => {
-            // Set the transcript
+            // Set the transcript and type it into the terminal
             this.currentTranscript = result.transcript
-            this.updateTerminalInput()
-
-            // Auto-submit after transcription completes
-            setTimeout(() => {
-                this.submitCommand()
-            }, 100)
+            this.typeIntoTerminal(result.transcript)
         })
 
         // Handle recording start
@@ -34,13 +29,11 @@ export class TerminalIntegrationService {
             this.isListening = true
             this.currentTranscript = ''
             this.interimTranscript = ''
-            this.setupEnterKeyListener()
         })
 
         // Handle recording stop
         this.speechService.onStop.subscribe(() => {
             this.isListening = false
-            this.removeEnterKeyListener()
         })
     }
 
@@ -74,76 +67,16 @@ export class TerminalIntegrationService {
         return null
     }
 
-    private updateTerminalInput(): void {
+    private typeIntoTerminal(text: string): void {
         const terminal = this.getActiveTerminal()
         if (!terminal) {
+            console.warn('No active terminal found')
             return
         }
 
-        // Get the full text to display (final + interim)
-        const fullText = this.currentTranscript + this.interimTranscript
-
-        // Send the text to the terminal
-        // We need to clear the current input and write the new text
-        // This is a simplified approach - you may need to adjust based on Tabby's API
-        this.sendToTerminal(fullText)
-    }
-
-    private sendToTerminal(text: string): void {
-        const terminal = this.getActiveTerminal()
-        if (!terminal || !terminal.frontend) {
-            return
-        }
-
-        // Clear current line and write new text
-        // Note: This implementation may need adjustment based on how Tabby handles input
-        // We're simulating typing the text
-        terminal.frontend.write('\r\x1b[K' + text)
-    }
-
-    private enterKeyListener = (event: KeyboardEvent) => {
-        if (!this.isListening) {
-            return
-        }
-
-        if (event.key === 'Enter' || event.code === 'Enter') {
-            event.preventDefault()
-            event.stopPropagation()
-
-            // Stop recording
-            this.speechService.stop()
-
-            // Submit the command
-            this.submitCommand()
-        }
-    }
-
-    private setupEnterKeyListener(): void {
-        const terminal = this.getActiveTerminal()
-        if (!terminal) {
-            return
-        }
-
-        // Add keyboard event listener to intercept Enter key
-        document.addEventListener('keydown', this.enterKeyListener, true)
-    }
-
-    private removeEnterKeyListener(): void {
-        document.removeEventListener('keydown', this.enterKeyListener, true)
-    }
-
-    private submitCommand(): void {
-        const terminal = this.getActiveTerminal()
-        if (!terminal) {
-            return
-        }
-
-        // Send Enter to execute the command
-        terminal.sendInput('\n')
-
-        // Clear our transcript buffer
-        this.currentTranscript = ''
-        this.interimTranscript = ''
+        // Send the text character by character to simulate typing
+        // This will make it appear in the terminal's input buffer
+        terminal.sendInput(text)
     }
 
     public toggleListening(): void {
