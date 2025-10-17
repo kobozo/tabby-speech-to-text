@@ -38,7 +38,7 @@ export class WebSpeechService {
         this.recognition.maxAlternatives = 1
 
         // Set language from config
-        const language = this.config.store.speechToText?.language || 'en-US'
+        const language = this.config.store?.speechToText?.language || 'en-US'
         this.recognition.lang = language
 
         // Handle results
