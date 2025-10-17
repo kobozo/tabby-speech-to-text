@@ -4,7 +4,7 @@ import { TerminalIntegrationService } from '../services/terminal-integration.ser
 
 @Injectable()
 export class SpeechToTextToolbarButtonProvider extends ToolbarButtonProvider {
-    private button: ToolbarButton | null = null
+    private buttons: ToolbarButton[] = []
 
     constructor(
         private terminalIntegration: TerminalIntegrationService,
@@ -18,7 +18,7 @@ export class SpeechToTextToolbarButtonProvider extends ToolbarButtonProvider {
     }
 
     provide(): ToolbarButton[] {
-        this.button = {
+        const button: ToolbarButton = {
             icon: this.getMicIcon(false),
             title: 'Toggle Speech-to-Text',
             weight: 5,
@@ -26,13 +26,22 @@ export class SpeechToTextToolbarButtonProvider extends ToolbarButtonProvider {
                 this.terminalIntegration.toggleListening()
             },
         }
-        return [this.button]
+        this.buttons = [button]
+        return this.buttons
     }
 
     private updateButtonIcon(isRecording: boolean): void {
-        if (this.button) {
-            this.button.icon = this.getMicIcon(isRecording)
-        }
+        console.log('[SpeechToText] Updating button icon, isRecording:', isRecording)
+        console.log('[SpeechToText] Button instances:', this.buttons.length)
+
+        // Update all button instances
+        this.buttons.forEach((button, index) => {
+            const newIcon = this.getMicIcon(isRecording)
+            console.log(`[SpeechToText] Button ${index} old icon length:`, button.icon?.length)
+            console.log(`[SpeechToText] Button ${index} new icon length:`, newIcon.length)
+            button.icon = newIcon
+            button.title = isRecording ? 'Stop Recording (Recording...)' : 'Toggle Speech-to-Text'
+        })
     }
 
     private getMicIcon(isRecording: boolean): string {

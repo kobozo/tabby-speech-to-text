@@ -11,9 +11,15 @@ export interface TranscriptResult {
 export class SpeechRecognitionService {
     private mediaRecorder: MediaRecorder | null = null
     private audioChunks: Blob[] = []
+    private allChunks: Blob[] = []  // Keep all chunks for full transcription
     private isActive = false
     private isAvailable = false
     private stream: MediaStream | null = null
+    private audioContext: AudioContext | null = null
+    private analyser: AnalyserNode | null = null
+    private silenceDetectionInterval: any = null
+    private lastSoundTime = 0
+    private isProcessingChunk = false
 
     public onTranscript = new Subject<TranscriptResult>()
     public onStart = new Subject<void>()
@@ -65,27 +71,47 @@ export class SpeechRecognitionService {
             // Request microphone access
             this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 
-            // Create MediaRecorder
+            // Set up audio context for silence detection
+            this.audioContext = new AudioContext()
+            const source = this.audioContext.createMediaStreamSource(this.stream)
+            this.analyser = this.audioContext.createAnalyser()
+            this.analyser.fftSize = 2048
+            source.connect(this.analyser)
+
+            // Create MediaRecorder with timeslice for chunked recording
             this.mediaRecorder = new MediaRecorder(this.stream, {
                 mimeType: 'audio/webm',
             })
 
             this.audioChunks = []
+            this.allChunks = []
+            this.lastSoundTime = Date.now()
 
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data)
+                    this.allChunks.push(event.data)
                 }
             }
 
             this.mediaRecorder.onstop = async () => {
-                // Create blob from recorded chunks
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' })
+                // Stop silence detection
+                if (this.silenceDetectionInterval) {
+                    clearInterval(this.silenceDetectionInterval)
+                    this.silenceDetectionInterval = null
+                }
 
-                // Send to Whisper API for transcription
-                await this.transcribeAudio(audioBlob)
+                // Process any remaining audio
+                if (this.audioChunks.length > 0 && !this.isProcessingChunk) {
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' })
+                    await this.transcribeAudio(audioBlob, true)
+                }
 
                 // Clean up
+                if (this.audioContext) {
+                    this.audioContext.close()
+                    this.audioContext = null
+                }
                 if (this.stream) {
                     this.stream.getTracks().forEach(track => track.stop())
                     this.stream = null
@@ -95,9 +121,13 @@ export class SpeechRecognitionService {
                 this.onStop.next()
             }
 
-            this.mediaRecorder.start()
+            // Start recording with 1-second time slices
+            this.mediaRecorder.start(1000)
             this.isActive = true
             this.onStart.next()
+
+            // Start silence detection
+            this.startSilenceDetection()
         } catch (error) {
             console.error('Failed to start speech recognition:', error)
             this.onError.next('Failed to start recognition: ' + error)
@@ -125,7 +155,52 @@ export class SpeechRecognitionService {
         }
     }
 
-    private async transcribeAudio(audioBlob: Blob): Promise<void> {
+    private startSilenceDetection(): void {
+        const SILENCE_THRESHOLD = 0.01  // Volume threshold for silence
+        const SILENCE_DURATION = 1500   // 1.5 seconds of silence triggers transcription
+
+        this.silenceDetectionInterval = setInterval(() => {
+            if (!this.analyser) return
+
+            const bufferLength = this.analyser.frequencyBinCount
+            const dataArray = new Uint8Array(bufferLength)
+            this.analyser.getByteTimeDomainData(dataArray)
+
+            // Calculate average volume
+            let sum = 0
+            for (let i = 0; i < bufferLength; i++) {
+                const normalized = (dataArray[i] - 128) / 128
+                sum += normalized * normalized
+            }
+            const rms = Math.sqrt(sum / bufferLength)
+
+            // Check if there's sound
+            if (rms > SILENCE_THRESHOLD) {
+                this.lastSoundTime = Date.now()
+            } else {
+                // Check if silence duration exceeded
+                const silenceDuration = Date.now() - this.lastSoundTime
+                if (silenceDuration >= SILENCE_DURATION && this.audioChunks.length > 0 && !this.isProcessingChunk) {
+                    console.log('[SpeechRecognition] Silence detected, processing chunk...')
+                    this.processCurrentChunk()
+                }
+            }
+        }, 100)  // Check every 100ms
+    }
+
+    private async processCurrentChunk(): Promise<void> {
+        if (this.audioChunks.length === 0 || this.isProcessingChunk) return
+
+        this.isProcessingChunk = true
+        const chunksToProcess = [...this.audioChunks]
+        this.audioChunks = []  // Clear for next chunk
+
+        const audioBlob = new Blob(chunksToProcess, { type: 'audio/webm' })
+        await this.transcribeAudio(audioBlob, false)
+        this.isProcessingChunk = false
+    }
+
+    private async transcribeAudio(audioBlob: Blob, isFinal: boolean = true): Promise<void> {
         const apiKey = this.config.store?.speechToText?.openaiApiKey
 
         if (!apiKey) {
@@ -157,8 +232,9 @@ export class SpeechRecognitionService {
             const transcript = result.text
 
             if (transcript && transcript.trim()) {
-                // Send final transcript
-                this.onTranscript.next({ transcript: transcript.trim(), isFinal: true })
+                // Send transcript (interim or final)
+                console.log(`[SpeechRecognition] Transcription result (${isFinal ? 'final' : 'interim'}):`, transcript.trim())
+                this.onTranscript.next({ transcript: transcript.trim(), isFinal })
             }
         } catch (error) {
             console.error('Transcription error:', error)
