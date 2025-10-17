@@ -19,6 +19,7 @@ export class SpeechRecognitionService {
     private lastSoundTime = 0
     private isProcessingChunk = false
     private isRecordingChunk = false
+    private hadSpeechInChunk = false  // Track if current chunk had actual speech
 
     public onTranscript = new Subject<TranscriptResult>()
     public onStart = new Subject<void>()
@@ -86,14 +87,16 @@ export class SpeechRecognitionService {
 
             this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0) {
-                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes`)
+                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes, Had speech: ${this.hadSpeechInChunk}`)
 
                     // Check minimum blob size (at least 2KB to avoid "too short" errors)
                     const MIN_BLOB_SIZE = 2048
                     if (event.data.size < MIN_BLOB_SIZE) {
                         console.log(`[SpeechRecognition] Skipping chunk - too small (${event.data.size} bytes < ${MIN_BLOB_SIZE} bytes)`)
+                    } else if (!this.hadSpeechInChunk) {
+                        console.log(`[SpeechRecognition] Skipping chunk - no actual speech detected (only background noise)`)
                     } else {
-                        // This blob is a complete WebM file
+                        // This blob is a complete WebM file with actual speech
                         await this.transcribeAudio(event.data, false)
                     }
 
@@ -103,9 +106,11 @@ export class SpeechRecognitionService {
                         this.mediaRecorder.start()
                         this.isRecordingChunk = true
                         this.isProcessingChunk = false
+                        this.hadSpeechInChunk = false  // Reset for next chunk
                     } else {
                         // Reset processing flag even if not restarting
                         this.isProcessingChunk = false
+                        this.hadSpeechInChunk = false
                     }
                 }
             }
@@ -210,24 +215,26 @@ export class SpeechRecognitionService {
             // Check if there's actual speech (not just background noise)
             if (rms > SPEECH_THRESHOLD) {
                 hasActualSpeech = true
+                this.hadSpeechInChunk = true  // Mark that this chunk has speech
                 this.lastSoundTime = Date.now()
             } else if (rms > SILENCE_THRESHOLD) {
                 // Still some sound, but not strong enough to be considered speech
                 this.lastSoundTime = Date.now()
             } else {
-                // Check if silence duration exceeded AND we have enough audio duration AND we detected actual speech
+                // Check if silence duration exceeded AND we have enough audio duration
                 const silenceDuration = Date.now() - this.lastSoundTime
                 const recordingDuration = Date.now() - recordingStartTime
 
+                // Only process if we have actual silence AND enough recording time
+                // We'll check hasActualSpeech in ondataavailable before sending to API
                 if (silenceDuration >= SILENCE_DURATION &&
                     recordingDuration >= MIN_RECORDING_DURATION &&
-                    hasActualSpeech &&
                     !this.isProcessingChunk &&
                     this.isRecordingChunk &&
                     this.mediaRecorder.state === 'recording') {
 
                     console.log('[SpeechRecognition] Silence detected! Stopping recorder to process chunk...')
-                    console.log(`[SpeechRecognition] Silence: ${silenceDuration}ms, Recording duration: ${recordingDuration}ms`)
+                    console.log(`[SpeechRecognition] Silence: ${silenceDuration}ms, Recording duration: ${recordingDuration}ms, Had speech: ${hasActualSpeech}`)
 
                     this.isProcessingChunk = true
                     this.isRecordingChunk = false
