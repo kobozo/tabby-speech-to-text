@@ -87,14 +87,24 @@ export class SpeechRecognitionService {
             this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0) {
                     console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes`)
-                    // This blob is a complete WebM file
-                    await this.transcribeAudio(event.data, false)
 
-                    // After transcription, restart recording if still active
+                    // Check minimum blob size (at least 2KB to avoid "too short" errors)
+                    const MIN_BLOB_SIZE = 2048
+                    if (event.data.size < MIN_BLOB_SIZE) {
+                        console.log(`[SpeechRecognition] Skipping chunk - too small (${event.data.size} bytes < ${MIN_BLOB_SIZE} bytes)`)
+                    } else {
+                        // This blob is a complete WebM file
+                        await this.transcribeAudio(event.data, false)
+                    }
+
+                    // After transcription (or skip), restart recording if still active
                     if (this.isActive && this.mediaRecorder && this.mediaRecorder.state === 'inactive') {
                         console.log('[SpeechRecognition] Restarting recording for next chunk...')
                         this.mediaRecorder.start()
                         this.isRecordingChunk = true
+                        this.isProcessingChunk = false
+                    } else {
+                        // Reset processing flag even if not restarting
                         this.isProcessingChunk = false
                     }
                 }
