@@ -20,6 +20,7 @@ export class SpeechRecognitionService {
     private isProcessingChunk = false
     private isRecordingChunk = false
     private hadSpeechInChunk = false  // Track if current chunk had actual speech
+    private hadSpeechBeforeManualStop = false  // Capture speech state before manual stop
     private totalSilenceStartTime: number | null = null  // Track continuous silence
     private recordingStartTime = 0  // Track total recording duration
     private continuousRecordingWarningShown = false
@@ -145,13 +146,17 @@ export class SpeechRecognitionService {
                 if (event.data.size > 0) {
                     // Check if this is a manual stop or auto-chunk
                     const isManualStop = !this.isActive
-                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes, Had speech: ${this.hadSpeechInChunk}, Manual stop: ${isManualStop}`)
+
+                    // For manual stops, use the captured state; for auto-chunks, use current state
+                    const hadSpeech = isManualStop ? this.hadSpeechBeforeManualStop : this.hadSpeechInChunk
+
+                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes, Had speech: ${hadSpeech}, Manual stop: ${isManualStop}`)
 
                     // Check minimum blob size (at least 2KB to avoid "too short" errors)
                     const MIN_BLOB_SIZE = 2048
                     if (event.data.size < MIN_BLOB_SIZE) {
                         console.log(`[SpeechRecognition] Skipping chunk - too small (${event.data.size} bytes < ${MIN_BLOB_SIZE} bytes)`)
-                    } else if (!this.hadSpeechInChunk) {
+                    } else if (!hadSpeech) {
                         // Skip if no actual speech detected (prevents Whisper hallucinations on silence)
                         // This applies to both auto-chunking AND manual stops during silence
                         console.log(`[SpeechRecognition] Skipping chunk - no actual speech detected (only background noise)${isManualStop ? ' [manual stop]' : ''}`)
@@ -208,6 +213,7 @@ export class SpeechRecognitionService {
             this.isActive = true
             this.isRecordingChunk = true
             this.hadSpeechInChunk = false  // Initialize for first chunk
+            this.hadSpeechBeforeManualStop = false  // Reset captured state
             this.recordingStartTime = Date.now()
             this.totalSilenceStartTime = null
             this.continuousRecordingWarningShown = false
@@ -239,6 +245,10 @@ export class SpeechRecognitionService {
                 this.silenceDetectionInterval = null
                 console.log('[SpeechRecognition] Silence detection interval cleared')
             }
+
+            // CRITICAL: Capture speech state BEFORE resetting, so ondataavailable can use it
+            this.hadSpeechBeforeManualStop = this.hadSpeechInChunk
+            console.log(`[SpeechRecognition] Captured speech state before stop: ${this.hadSpeechBeforeManualStop}`)
 
             // Mark as inactive BEFORE stopping so onstop knows this is final
             this.isActive = false
