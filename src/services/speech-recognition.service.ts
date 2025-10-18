@@ -20,16 +20,21 @@ export class SpeechRecognitionService {
     private isProcessingChunk = false
     private isRecordingChunk = false
     private hadSpeechInChunk = false  // Track if current chunk had actual speech
+    private totalSilenceStartTime: number | null = null  // Track continuous silence
+    private recordingStartTime = 0  // Track total recording duration
+    private continuousRecordingWarningShown = false
 
     public onTranscript = new Subject<TranscriptResult>()
     public onStart = new Subject<void>()
     public onStop = new Subject<void>()
     public onError = new Subject<string>()
+    public onWarning = new Subject<string>()
 
     constructor(
         private config: ConfigService,
     ) {
         this.checkAvailability()
+        this.requestNotificationPermission()
     }
 
     private async checkAvailability(): Promise<void> {
@@ -45,6 +50,50 @@ export class SpeechRecognitionService {
         } catch (error) {
             console.error('Error checking availability:', error)
             this.isAvailable = false
+        }
+    }
+
+    private async requestNotificationPermission(): Promise<void> {
+        if ('Notification' in window && Notification.permission === 'default') {
+            try {
+                await Notification.requestPermission()
+            } catch (error) {
+                console.error('Error requesting notification permission:', error)
+            }
+        }
+    }
+
+    private showNotification(title: string, body: string): void {
+        if ('Notification' in window) {
+            if (Notification.permission === 'granted') {
+                try {
+                    new Notification(title, {
+                        body,
+                        icon: 'assets/icons/microphone.png',  // Optional icon
+                        tag: 'speech-to-text',  // Prevent duplicate notifications
+                    })
+                } catch (error) {
+                    console.error('Error showing notification:', error)
+                }
+            } else if (Notification.permission === 'default') {
+                // Request permission and retry showing the notification
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        try {
+                            new Notification(title, {
+                                body,
+                                icon: 'assets/icons/microphone.png',
+                                tag: 'speech-to-text',
+                            })
+                        } catch (error) {
+                            console.error('Error showing notification after permission grant:', error)
+                        }
+                    }
+                }).catch(error => {
+                    console.error('Error requesting notification permission:', error)
+                })
+            }
+            // If permission is 'denied', silently skip showing notification
         }
     }
 
@@ -64,6 +113,13 @@ export class SpeechRecognitionService {
 
         if (this.isActive) {
             console.warn('Speech recognition already active')
+            return
+        }
+
+        // Validate API key before starting
+        const apiKey = this.config.store?.speechToText?.openaiApiKey
+        if (!apiKey) {
+            this.onError.next('OpenAI API key not configured. Please set it in Settings.')
             return
         }
 
@@ -144,7 +200,13 @@ export class SpeechRecognitionService {
             this.mediaRecorder.start()
             this.isActive = true
             this.isRecordingChunk = true
+            this.recordingStartTime = Date.now()
+            this.totalSilenceStartTime = null
+            this.continuousRecordingWarningShown = false
             this.onStart.next()
+
+            // Show notification that recording started
+            this.showNotification('Speech-to-Text Recording Started', 'Speech recognition is now active and will continue even when Tabby is in the background.')
 
             // Start silence detection
             this.startSilenceDetection()
@@ -163,6 +225,15 @@ export class SpeechRecognitionService {
         try {
             // Mark as inactive BEFORE stopping so onstop knows this is final
             this.isActive = false
+
+            // Reset all timer state to prevent race conditions
+            this.totalSilenceStartTime = null
+            this.recordingStartTime = 0
+            this.continuousRecordingWarningShown = false
+            this.hadSpeechInChunk = false
+            this.isProcessingChunk = false
+            this.isRecordingChunk = false
+
             this.mediaRecorder.stop()
         } catch (error) {
             console.error('Failed to stop speech recognition:', error)
@@ -182,6 +253,8 @@ export class SpeechRecognitionService {
         const SPEECH_THRESHOLD = 0.05   // Minimum volume to consider as actual speech
         const SILENCE_DURATION = 1500   // 1.5 seconds of silence triggers transcription
         const MIN_RECORDING_DURATION = 1000  // Minimum 1 second of audio before processing
+        const MAX_TOTAL_SILENCE_MS = 5 * 60 * 1000  // 5 minutes of total silence
+        const MAX_CONTINUOUS_RECORDING_MS = 10 * 60 * 1000  // 10 minutes continuous warning
         let recordingStartTime = Date.now()
         let hasActualSpeech = false  // Track if we detected real speech (not just noise)
 
@@ -217,13 +290,37 @@ export class SpeechRecognitionService {
                 hasActualSpeech = true
                 this.hadSpeechInChunk = true  // Mark that this chunk has speech
                 this.lastSoundTime = Date.now()
+                this.totalSilenceStartTime = null  // Reset total silence timer
             } else if (rms > SILENCE_THRESHOLD) {
                 // Still some sound, but not strong enough to be considered speech
                 this.lastSoundTime = Date.now()
             } else {
+                // Track total silence duration for auto-stop
+                if (this.totalSilenceStartTime === null) {
+                    this.totalSilenceStartTime = Date.now()
+                }
+                const totalSilenceDuration = Date.now() - this.totalSilenceStartTime
+
+                // Auto-stop after 5 minutes of total silence
+                if (totalSilenceDuration >= MAX_TOTAL_SILENCE_MS) {
+                    console.log('[SpeechRecognition] 5 minutes of silence detected - auto-stopping recording')
+                    this.showNotification('Speech-to-Text Auto-Stopped', 'Recording stopped after 5 minutes of silence.')
+                    this.stop()
+                    return
+                }
                 // Check if silence duration exceeded AND we have enough audio duration
                 const silenceDuration = Date.now() - this.lastSoundTime
                 const recordingDuration = Date.now() - recordingStartTime
+
+                // Check for continuous recording without significant silence breaks
+                const totalRecordingDuration = Date.now() - this.recordingStartTime
+                if (totalRecordingDuration >= MAX_CONTINUOUS_RECORDING_MS && !this.continuousRecordingWarningShown) {
+                    console.log('[SpeechRecognition] Recording continuously for 10+ minutes - showing warning')
+                    const warningMessage = 'Recording has been active for over 10 minutes continuously. Consider stopping if not needed.'
+                    this.showNotification('Speech-to-Text Warning', warningMessage)
+                    this.onWarning.next(warningMessage)
+                    this.continuousRecordingWarningShown = true
+                }
 
                 // Only process if we have actual silence AND enough recording time
                 // We'll check hasActualSpeech in ondataavailable before sending to API
