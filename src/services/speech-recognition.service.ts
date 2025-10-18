@@ -143,16 +143,22 @@ export class SpeechRecognitionService {
 
             this.mediaRecorder.ondataavailable = async (event) => {
                 if (event.data.size > 0) {
-                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes, Had speech: ${this.hadSpeechInChunk}`)
+                    // Check if this is a manual stop or auto-chunk
+                    const isManualStop = !this.isActive
+                    console.log(`[SpeechRecognition] Received complete WebM blob: ${event.data.size} bytes, Had speech: ${this.hadSpeechInChunk}, Manual stop: ${isManualStop}`)
 
                     // Check minimum blob size (at least 2KB to avoid "too short" errors)
                     const MIN_BLOB_SIZE = 2048
                     if (event.data.size < MIN_BLOB_SIZE) {
                         console.log(`[SpeechRecognition] Skipping chunk - too small (${event.data.size} bytes < ${MIN_BLOB_SIZE} bytes)`)
-                    } else if (!this.hadSpeechInChunk) {
+                    } else if (!this.hadSpeechInChunk && !isManualStop) {
+                        // Only skip if no speech detected AND this is auto-chunking (not manual stop)
                         console.log(`[SpeechRecognition] Skipping chunk - no actual speech detected (only background noise)`)
                     } else {
-                        // This blob is a complete WebM file with actual speech
+                        // This blob is a complete WebM file with actual speech OR manual stop
+                        if (isManualStop) {
+                            console.log(`[SpeechRecognition] Processing final chunk (manual stop)`)
+                        }
                         await this.transcribeAudio(event.data, false)
                     }
 
@@ -200,6 +206,7 @@ export class SpeechRecognitionService {
             this.mediaRecorder.start()
             this.isActive = true
             this.isRecordingChunk = true
+            this.hadSpeechInChunk = false  // Initialize for first chunk
             this.recordingStartTime = Date.now()
             this.totalSilenceStartTime = null
             this.continuousRecordingWarningShown = false
