@@ -151,13 +151,14 @@ export class SpeechRecognitionService {
                     const MIN_BLOB_SIZE = 2048
                     if (event.data.size < MIN_BLOB_SIZE) {
                         console.log(`[SpeechRecognition] Skipping chunk - too small (${event.data.size} bytes < ${MIN_BLOB_SIZE} bytes)`)
-                    } else if (!this.hadSpeechInChunk && !isManualStop) {
-                        // Only skip if no speech detected AND this is auto-chunking (not manual stop)
-                        console.log(`[SpeechRecognition] Skipping chunk - no actual speech detected (only background noise)`)
+                    } else if (!this.hadSpeechInChunk) {
+                        // Skip if no actual speech detected (prevents Whisper hallucinations on silence)
+                        // This applies to both auto-chunking AND manual stops during silence
+                        console.log(`[SpeechRecognition] Skipping chunk - no actual speech detected (only background noise)${isManualStop ? ' [manual stop]' : ''}`)
                     } else {
-                        // This blob is a complete WebM file with actual speech OR manual stop
+                        // This blob is a complete WebM file with actual speech
                         if (isManualStop) {
-                            console.log(`[SpeechRecognition] Processing final chunk (manual stop)`)
+                            console.log(`[SpeechRecognition] Processing final chunk with speech (manual stop)`)
                         }
                         await this.transcribeAudio(event.data, false)
                     }
