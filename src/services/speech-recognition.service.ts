@@ -222,7 +222,16 @@ export class SpeechRecognitionService {
             return
         }
 
+        console.log('[SpeechRecognition] Stopping recording...')
+
         try {
+            // CRITICAL: Stop silence detection interval FIRST to prevent it from restarting recording
+            if (this.silenceDetectionInterval) {
+                clearInterval(this.silenceDetectionInterval)
+                this.silenceDetectionInterval = null
+                console.log('[SpeechRecognition] Silence detection interval cleared')
+            }
+
             // Mark as inactive BEFORE stopping so onstop knows this is final
             this.isActive = false
 
@@ -234,7 +243,10 @@ export class SpeechRecognitionService {
             this.isProcessingChunk = false
             this.isRecordingChunk = false
 
-            this.mediaRecorder.stop()
+            // Stop the MediaRecorder (this will trigger onstop handler)
+            if (this.mediaRecorder.state !== 'inactive') {
+                this.mediaRecorder.stop()
+            }
         } catch (error) {
             console.error('Failed to stop speech recognition:', error)
         }
